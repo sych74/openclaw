@@ -1,4 +1,4 @@
-# Test cases: OpenClaw Jelastic package
+# Test cases: OpenClaw Virtuozzo package
 
 Manifest: `manifest.jps` v1.8  
 Docs: [OpenClaw documentation](https://docs.openclaw.ai/)
