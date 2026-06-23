@@ -22,7 +22,7 @@ Docs: [OpenClaw documentation](https://docs.openclaw.ai/)
 
 | ID | Priority | Type | Title | Steps | Expected |
 |----|----------|------|-------|-------|----------|
-| PKG-01 | P0 | Manual | Clean install | Install package in Jelastic → wait for Success | Access card with Token (`oc_…`) and Password (`pw_…`) |
+| PKG-01 | P0 | Manual | Clean install | Install package in Virtuozzo → wait for Success | Access card with Token (`oc_…`) and Password (`pw_…`) |
 | PKG-02 | P0 | Manual | Unique credentials | Install two separate environments | Token and Password differ between envs |
 | PKG-03 | P0 | Auto | Container running | `docker ps --filter name=openclaw` | Status `Up`, restart policy `unless-stopped` |
 | PKG-04 | P0 | Auto | Runtime image | `docker images \| grep openclaw-node` | Image `openclaw-node:22-bullseye-slim` present |
@@ -76,7 +76,7 @@ Run after P0 smoke passes. Reference: [docs.openclaw.ai](https://docs.openclaw.a
 | Step | Time | Action | Fallback |
 |------|------|--------|----------|
 | 1 | 2 min | Overview: self-hosted AI gateway | Show docs Overview |
-| 2 | 2 min | Jelastic one-click install | Pre-installed env |
+| 2 | 2 min | Virtuozzo one-click install | Pre-installed env |
 | 3 | 1 min | Unique token in access card | Screenshot |
 | 4 | 2 min | Open in browser → Control UI | Manual URL with `#token=` |
 | 5 | 3 min | Tour UI: chat, settings | Screenshot |

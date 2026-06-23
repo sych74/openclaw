@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# OpenClaw Jelastic package smoke tests.
+# OpenClaw Virtuozzo package smoke tests.
 # Run on the cp (Docker Engine) node after install or redeploy.
 #
 # Usage:
 #   ./tests/smoke-test.sh
-#   ./tests/smoke-test.sh --domain myenv.demo.jelastic.com
+#   ./tests/smoke-test.sh --domain myenv.demo.virtuozzo.com
 #   ./tests/smoke-test.sh --token oc_xxxxxxxx --verbose
 #
 # See tests/test-cases.md for full manual test matrix.
@@ -33,7 +33,7 @@ WARN_COUNT=0
 
 usage() {
   cat <<'EOF'
-OpenClaw Jelastic smoke test
+OpenClaw Virtuozzo smoke test
 
 Options:
   --domain HOST     HTTPS check against https://HOST/ (optional)
@@ -44,7 +44,7 @@ Options:
 
 Examples:
   ./tests/smoke-test.sh
-  ./tests/smoke-test.sh --domain app123.demo.jelastic.com --token oc_abc...
+  ./tests/smoke-test.sh --domain app123.demo.virtuozzo.com --token oc_abc...
 
 Full test matrix: tests/test-cases.md
 EOF
