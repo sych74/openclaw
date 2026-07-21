@@ -1,0 +1,231 @@
+type: update
+id: configure-ai-models
+name: Configure AI Models
+description: Register OpenAI, OpenRouter, Anthropic, Gemini, and Grok providers via onboard.
+
+baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
+
+targetNodes:
+  nodeGroup: cp
+
+settings:
+  fields:
+    - type: displayfield
+      name: currentModels
+      hideLabel: true
+      cls: info
+      markup: Loading current model configuration...
+    - type: displayfield
+      name: apiKeyHint
+      hideLabel: true
+      cls: warning
+      markup: Enter one or more API keys to register providers. Keys already set as platform environment variables on this node are used when a field is left empty.
+    - type: string
+      name: openaiApiKey
+      caption: OpenAI API Key
+      default: ""
+    - type: string
+      name: openrouterApiKey
+      caption: OpenRouter API Key
+      default: ""
+    - type: string
+      name: anthropicApiKey
+      caption: Anthropic API Key
+      default: ""
+    - type: string
+      name: geminiApiKey
+      caption: Gemini API Key
+      default: ""
+    - type: string
+      name: grokApiKey
+      caption: Grok (xAI) API Key
+      default: ""
+
+onInstall:
+  - cmd[cp]: |-
+      set -eu
+
+      ENV_FILE="/root/openclaw.env"
+
+      # Read platform env vars at runtime (avoid JPS ${VAR:-} substitution in cmd blocks).
+      OPENAI_KEY="$(printenv OPENAI_API_KEY 2>/dev/null | tr -d '\r\n' || true)"
+      OPENROUTER_KEY="$(printenv OPENROUTER_API_KEY 2>/dev/null | tr -d '\r\n' || true)"
+      ANTHROPIC_KEY="$(printenv ANTHROPIC_API_KEY 2>/dev/null | tr -d '\r\n' || true)"
+      GEMINI_KEY="$(printenv GEMINI_API_KEY 2>/dev/null | tr -d '\r\n' || printenv GOOGLE_API_KEY 2>/dev/null | tr -d '\r\n' || true)"
+      GROK_KEY="$(printenv XAI_API_KEY 2>/dev/null | tr -d '\r\n' || true)"
+
+      FORM_OPENAI="${settings.openaiApiKey}"
+      FORM_OPENROUTER="${settings.openrouterApiKey}"
+      FORM_ANTHROPIC="${settings.anthropicApiKey}"
+      FORM_GEMINI="${settings.geminiApiKey}"
+      FORM_GROK="${settings.grokApiKey}"
+
+      [ -n "$FORM_OPENAI" ] && OPENAI_KEY="$(printf '%s' "$FORM_OPENAI" | tr -d '\r\n')"
+      [ -n "$FORM_OPENROUTER" ] && OPENROUTER_KEY="$(printf '%s' "$FORM_OPENROUTER" | tr -d '\r\n')"
+      [ -n "$FORM_ANTHROPIC" ] && ANTHROPIC_KEY="$(printf '%s' "$FORM_ANTHROPIC" | tr -d '\r\n')"
+      [ -n "$FORM_GEMINI" ] && GEMINI_KEY="$(printf '%s' "$FORM_GEMINI" | tr -d '\r\n')"
+      [ -n "$FORM_GROK" ] && GROK_KEY="$(printf '%s' "$FORM_GROK" | tr -d '\r\n')"
+
+      normalize_env_value() {
+        printf '%s' "$1" | tr -d '\r\n' | sed 's/^"//; s/"$//'
+      }
+
+      set_env_var() {
+        key="$1"
+        value="$(normalize_env_value "$2")"
+        tmp="$(mktemp)"
+        if [ -f "$ENV_FILE" ]; then
+          grep -v "^$key=" "$ENV_FILE" > "$tmp" || true
+        fi
+        printf '%s=%s\n' "$key" "$value" >> "$tmp"
+        mv -f "$tmp" "$ENV_FILE"
+        chmod 600 "$ENV_FILE"
+      }
+
+      strip_onboard_vars() {
+        tmp="$(mktemp)"
+        grep -v '^ONBOARD_AUTH_CHOICE=' "$ENV_FILE" > "$tmp" || true
+        mv -f "$tmp" "$ENV_FILE"
+        chmod 600 "$ENV_FILE"
+      }
+
+      normalize_env_file() {
+        tmp="$(mktemp)"
+        while IFS= read -r line || [ -n "$line" ]; do
+          case "$line" in
+            ''|ONBOARD_AUTH_CHOICE=*|\#*) continue ;;
+            *=*)
+              key="${line%%=*}"
+              value="${line#*=}"
+              value="$(normalize_env_value "$value")"
+              printf '%s=%s\n' "$key" "$value" >> "$tmp"
+              ;;
+          esac
+        done < "$ENV_FILE"
+        mv -f "$tmp" "$ENV_FILE"
+        chmod 600 "$ENV_FILE"
+      }
+
+      read_container_port() {
+        CONTAINER_PORT="18789"
+        if [ ! -f "$ENV_FILE" ]; then
+          return 0
+        fi
+        line="$(grep '^OPENCLAW_GATEWAY_PORT=' "$ENV_FILE" | tail -1 || true)"
+        if [ -z "$line" ]; then
+          return 0
+        fi
+        value="$(printf '%s' "$line" | sed 's/^OPENCLAW_GATEWAY_PORT=//')"
+        value="$(printf '%s' "$value" | sed 's/^"//; s/"$//')"
+        CONTAINER_PORT="$value"
+      }
+
+      if ! docker inspect openclaw >/dev/null 2>&1; then
+        echo "OpenClaw container was not found."
+        exit 1
+      fi
+
+      OPENCLAW_MOUNT="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/home/node/.openclaw"}}{{.Source}}{{end}}{{end}}' openclaw)"
+      OPENCLAW_IMAGE="$(docker inspect -f '{{.Config.Image}}' openclaw)"
+      read_container_port
+      PUBLIC_PORT="$(docker port openclaw "$CONTAINER_PORT/tcp" 2>/dev/null | head -1 | cut -d: -f2 || true)"
+      if [ -z "$PUBLIC_PORT" ]; then
+        PUBLIC_PORT="80"
+      fi
+
+      if [ -z "$OPENCLAW_MOUNT" ]; then
+        echo "Could not detect OpenClaw data mount."
+        exit 1
+      fi
+
+      if [ -z "$OPENAI_KEY" ] && [ -z "$OPENROUTER_KEY" ] && [ -z "$ANTHROPIC_KEY" ] && [ -z "$GEMINI_KEY" ] && [ -z "$GROK_KEY" ]; then
+        echo "Provide at least one API key in the form or as a platform environment variable on this node."
+        exit 1
+      fi
+
+      ONBOARD_SCRIPT="$(mktemp /tmp/openclaw-onboard.XXXXXX.sh)"
+      cat > "$ONBOARD_SCRIPT" << 'OC_ONBOARD'
+      #!/bin/sh
+      set -eu
+      export OPENCLAW_CONFIG_DIR=/home/node/.openclaw
+      export OPENCLAW_WORKSPACE_DIR=/home/node/.openclaw/workspace
+      mkdir -p /home/node/.openclaw/workspace /home/node/.openclaw/devices
+      if ! command -v openclaw >/dev/null 2>&1; then
+        npm install -g openclaw@latest
+      fi
+      openclaw onboard --non-interactive --accept-risk \
+        --mode local \
+        --auth-choice "$ONBOARD_AUTH_CHOICE" \
+        --secret-input-mode ref \
+        --gateway-port "$OPENCLAW_GATEWAY_PORT" \
+        --gateway-bind lan \
+        --skip-bootstrap \
+        --skip-skills \
+        --skip-health
+      OC_ONBOARD
+      chmod 700 "$ONBOARD_SCRIPT"
+
+      run_onboard() {
+        onboard_choice="$1"
+        docker run --rm \
+          -u root \
+          -v "$OPENCLAW_MOUNT:/home/node/.openclaw" \
+          -v "$ONBOARD_SCRIPT:/tmp/openclaw-onboard.sh:ro" \
+          --env-file "$ENV_FILE" \
+          -e "ONBOARD_AUTH_CHOICE=$onboard_choice" \
+          "$OPENCLAW_IMAGE" \
+          sh /tmp/openclaw-onboard.sh
+      }
+
+      recreate_openclaw_container() {
+        docker rm -f openclaw
+        docker run -d \
+          --name openclaw \
+          --restart unless-stopped \
+          -u root \
+          -p "$PUBLIC_PORT:$CONTAINER_PORT" \
+          -v "$OPENCLAW_MOUNT:/home/node/.openclaw" \
+          --env-file "$ENV_FILE" \
+          "$OPENCLAW_IMAGE" \
+          sh "/home/node/.openclaw/start.sh"
+      }
+
+      docker stop openclaw
+
+      sync_provider_key() {
+        key_name="$1"
+        key_value="$2"
+        form_value="$3"
+        onboard_choice="$4"
+
+        if [ -z "$key_value" ]; then
+          return 0
+        fi
+
+        set_env_var "$key_name" "$key_value"
+
+        if [ -n "$form_value" ]; then
+          run_onboard "$onboard_choice"
+        fi
+      }
+
+      sync_provider_key OPENAI_API_KEY "$OPENAI_KEY" "$FORM_OPENAI" openai-api-key
+      sync_provider_key OPENROUTER_API_KEY "$OPENROUTER_KEY" "$FORM_OPENROUTER" openrouter-api-key
+      sync_provider_key ANTHROPIC_API_KEY "$ANTHROPIC_KEY" "$FORM_ANTHROPIC" apiKey
+      sync_provider_key GEMINI_API_KEY "$GEMINI_KEY" "$FORM_GEMINI" gemini-api-key
+      sync_provider_key XAI_API_KEY "$GROK_KEY" "$FORM_GROK" xai-api-key
+
+      strip_onboard_vars
+      normalize_env_file
+      recreate_openclaw_container
+
+      for i in $(seq 1 120); do
+        if curl -fsS "http://127.0.0.1:$PUBLIC_PORT/" >/dev/null 2>&1; then
+          break
+        fi
+        sleep 2
+      done
+
+      docker exec openclaw sh -lc 'openclaw models status' || true
+
+      rm -f "$ONBOARD_SCRIPT"

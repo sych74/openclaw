@@ -1,5 +1,5 @@
 type: install
-version: 1.8
+version: 1.11
 
 name: OpenClaw
 displayName: OpenClaw
@@ -48,6 +48,7 @@ onInstall:
       OPENCLAW_VERSION="${globals.openclawVersion}"
       RUNTIME_IMAGE="${globals.runtimeImage}"
       RUNTIME_SOURCE="${globals.runtimeSource}"
+      ENV_FILE="/root/openclaw.env"
 
       install_helper_tools() {
         if command -v skopeo >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
@@ -94,17 +95,57 @@ onInstall:
 
       load_runtime_image
 
+      env_quote() {
+        printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+      }
+
+      normalize_env_value() {
+        printf '%s' "$1" | tr -d '\r\n' | sed 's/^"//; s/"$//'
+      }
+
+      set_env_var() {
+        key="$1"
+        value="$(normalize_env_value "$2")"
+        tmp="$(mktemp)"
+        if [ -f "${ENV_FILE}" ]; then
+          grep -v "^${key}=" "${ENV_FILE}" > "${tmp}" || true
+        fi
+        printf '%s=%s\n' "${key}" "${value}" >> "${tmp}"
+        mv -f "${tmp}" "${ENV_FILE}"
+        chmod 600 "${ENV_FILE}"
+      }
+
+      echo "Writing environment file..."
+      {
+        printf 'OPENCLAW_GATEWAY_TOKEN=%s\n' "$(normalize_env_value "${globals.gatewayToken}")"
+        printf 'OPENCLAW_GATEWAY_PASSWORD=%s\n' "$(normalize_env_value "${globals.gatewayPassword}")"
+        printf 'OPENCLAW_GATEWAY_PORT=%s\n' "$(normalize_env_value "${CONTAINER_PORT}")"
+        printf 'OPENCLAW_VERSION=%s\n' "$(normalize_env_value "${OPENCLAW_VERSION}")"
+      } > "${ENV_FILE}"
+      chmod 600 "${ENV_FILE}"
+
+      for provider_key in OPENAI_API_KEY OPENROUTER_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY GOOGLE_API_KEY XAI_API_KEY; do
+        provider_value="$(printenv "$provider_key" 2>/dev/null | tr -d '\r\n' || true)"
+        if [ -n "$provider_value" ]; then
+          set_env_var "$provider_key" "$provider_value"
+        fi
+      done
+
       echo "Writing startup script..."
-      cat > "${STATE_DIR}/start.sh" <<'EOF'
+      cat > "${STATE_DIR}/start.sh" <<'STARTSCRIPT'
       #!/bin/sh
-      set -eu
+      set -e
 
       export OPENCLAW_CONFIG_DIR="/home/node/.openclaw"
       export OPENCLAW_WORKSPACE_DIR="/home/node/.openclaw/workspace"
-      export OPENCLAW_GATEWAY_PORT="18789"
-      export OPENCLAW_GATEWAY_TOKEN=${globals.gatewayToken}
-      export OPENCLAW_GATEWAY_PASSWORD=${globals.gatewayPassword}
-      export OPENCLAW_VERSION="${OPENCLAW_VERSION}"
+      STARTSCRIPT
+      {
+        printf 'export OPENCLAW_GATEWAY_PORT="%s"\n' "$(env_quote "${CONTAINER_PORT}")"
+        printf 'export OPENCLAW_GATEWAY_TOKEN="%s"\n' "$(env_quote "${globals.gatewayToken}")"
+        printf 'export OPENCLAW_GATEWAY_PASSWORD="%s"\n' "$(env_quote "${globals.gatewayPassword}")"
+        printf 'export OPENCLAW_VERSION="%s"\n' "$(env_quote "${OPENCLAW_VERSION}")"
+      } >> "${STATE_DIR}/start.sh"
+      cat >> "${STATE_DIR}/start.sh" <<'STARTSCRIPT'
 
       mkdir -p /home/node/.openclaw/workspace /home/node/.openclaw/devices
 
@@ -118,12 +159,6 @@ onInstall:
       openclaw config set gateway.auth.token "${OPENCLAW_GATEWAY_TOKEN}"
       openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true
       openclaw config set gateway.trustedProxies '["127.0.0.1"]'
-
-      if [ -n "${GEMINI_API_KEY:-}" ] || [ -n "${GOOGLE_API_KEY:-}" ]; then
-        openclaw models set google/gemini-2.5-flash || true
-      elif [ -n "${OPENROUTER_API_KEY:-}" ]; then
-        openclaw models set openrouter/auto || true
-      fi
 
       if [ -n "${OPENCLAW_GATEWAY_PASSWORD}" ]; then
         openclaw config set gateway.auth.password "${OPENCLAW_GATEWAY_PASSWORD}" || true
@@ -189,8 +224,8 @@ onInstall:
       chmod 700 /tmp/openclaw-device-approval.js
       nohup node /tmp/openclaw-device-approval.js >/tmp/openclaw-device-approval.log 2>&1 &
 
-      exec openclaw gateway run --allow-unconfigured --bind lan --auth token --token ${globals.gatewayToken} --port 18789
-      EOF
+      exec openclaw gateway run --allow-unconfigured --bind lan --auth token --token "${OPENCLAW_GATEWAY_TOKEN}" --port "${OPENCLAW_GATEWAY_PORT}"
+      STARTSCRIPT
       chmod +x "${STATE_DIR}/start.sh"
 
       echo "Stopping old container if present..."
@@ -203,10 +238,7 @@ onInstall:
         -u root \
         -p "${PUBLIC_PORT}:${CONTAINER_PORT}" \
         -v "${STATE_DIR}:/home/node/.openclaw" \
-        -e OPENCLAW_GATEWAY_TOKEN=${globals.gatewayToken} \
-        -e OPENCLAW_GATEWAY_PASSWORD=${globals.gatewayPassword} \
-        -e OPENCLAW_GATEWAY_PORT="${CONTAINER_PORT}" \
-        -e OPENCLAW_VERSION="${OPENCLAW_VERSION}" \
+        --env-file "${ENV_FILE}" \
         "${RUNTIME_IMAGE}" \
         sh "/home/node/.openclaw/start.sh"
 
