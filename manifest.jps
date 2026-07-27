@@ -253,18 +253,16 @@ onInstall:
 
       curl -fsS "http://127.0.0.1:${PUBLIC_PORT}/" >/dev/null 2>&1 || true
       docker ps --filter name=openclaw
-
-
+  
   - install:
       jps: ${baseUrl}/addons/configure-ai-models.jps?_r=${fn.random}
       nodeGroup: cp
       targetNodes: cp
-
+  
   - install:
       jps: ${baseUrl}/addons/update-openclaw-latest.jps?_r=${fn.random}
       nodeGroup: cp
       targetNodes: cp
-  
 
 startPage: https://${env.domain}/?bootstrap=${fn.uuid}#token=${globals.gatewayToken}
 
