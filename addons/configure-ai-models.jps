@@ -11,6 +11,7 @@ targetNodes:
 buttons:
   - name: configure
     caption: Configure
+    settings: main
     confirmText: Apply provider configuration? The OpenClaw container will be restarted.
     loadingText: Configuring AI models...
     action: configure
@@ -27,7 +28,7 @@ settings:
       name: apiKeyHint
       hideLabel: true
       cls: warning
-      markup: Select a provider and enter an API key, or leave empty to use the matching platform environment variable on this node.
+      markup: Select a provider and enter an API key.
     - caption: Provider
       type: list
       name: provider
@@ -82,9 +83,6 @@ settings:
             - value: GEMINI_API_KEY
           grok:
             - value: XAI_API_KEY
-
-onInstall:
-  - configure
 
 actions:
   configure:
