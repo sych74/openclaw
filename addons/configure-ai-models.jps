@@ -8,9 +8,15 @@ baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
 targetNodes:
   nodeGroup: cp
 
-onBeforeInit: scripts/configureModelsOnBeforeInit.js
+buttons:
+  - name: configure
+    caption: Configure
+    confirmText: Apply provider configuration? The OpenClaw container will be restarted.
+    loadingText: Configuring AI models...
+    action: configure
 
 settings:
+  submitUnchanged: true
   fields:
     - type: displayfield
       name: currentModels
@@ -78,7 +84,11 @@ settings:
             - value: XAI_API_KEY
 
 onInstall:
-  - cmd[cp]: |-
+  - configure
+
+actions:
+  configure:
+    - cmd[cp]: |-
       set -eu
 
       ENV_FILE="/root/openclaw.env"

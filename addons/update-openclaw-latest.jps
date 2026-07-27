@@ -1,0 +1,22 @@
+type: update
+id: update-openclaw-latest
+name: Update OpenClaw to Latest
+description: Upgrade the OpenClaw CLI inside the running container and restart the gateway.
+
+baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
+
+targetNodes:
+  nodeGroup: cp
+
+onInstall:
+  - cmd[cp]: |-
+      set -eu
+      docker exec openclaw sh -lc 'npm install -g openclaw@latest'
+      docker restart openclaw
+      for i in $(seq 1 120); do
+        if docker exec openclaw sh -lc 'openclaw --version' >/dev/null 2>&1; then
+          break
+        fi
+        sleep 2
+      done
+      docker exec openclaw sh -lc 'openclaw --version' || true

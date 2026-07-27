@@ -12,6 +12,7 @@ Single-file JPS install manifest for OpenClaw on Virtuozzo (formerly Jelastic br
 
 - `manifest.jps` — install package (source of truth)
 - `addons/configure-ai-models.jps` — standalone copy of configure-ai-models addon (type: update)
+- `addons/update-openclaw-latest.jps` — standalone copy of update-openclaw-latest addon (type: update)
 - `scripts/configureModelsOnBeforeInit.js` — addon UI: query current models from container
 - `tests/smoke-test.sh` — smoke tests on cp node
 - `tests/test-cases.md` — manual/auto test matrix

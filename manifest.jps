@@ -5,6 +5,7 @@ name: OpenClaw
 displayName: OpenClaw
 description: OpenClaw is a browser-first local gateway for launching, connecting to, and managing your OpenClaw workspace with token-based authentication and built-in update actions.
 homepage: https://docs.openclaw.ai/
+baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
 logo: https://github.com/openclaw.png
 categories:
   - apps/dev-and-admin-tools
@@ -253,21 +254,17 @@ onInstall:
       curl -fsS "http://127.0.0.1:${PUBLIC_PORT}/" >/dev/null 2>&1 || true
       docker ps --filter name=openclaw
 
-addons:
-  - id: update-openclaw-latest
-    name: Update OpenClaw to Latest
-    onInstall:
-      cmd [cp]: |-
-        set -eu
-        docker exec openclaw sh -lc 'npm install -g openclaw@latest'
-        docker restart openclaw
-        for i in $(seq 1 120); do
-          if docker exec openclaw sh -lc 'openclaw --version' >/dev/null 2>&1; then
-            break
-          fi
-          sleep 2
-        done
-        docker exec openclaw sh -lc 'openclaw --version' || true
+
+  - install:
+      jps: ${baseUrl}/addons/configure-ai-models.jps?_r=${fn.random}
+      nodeGroup: cp
+      targetNodes: cp
+
+  - install:
+      jps: ${baseUrl}/addons/update-openclaw-latest.jps?_r=${fn.random}
+      nodeGroup: cp
+      targetNodes: cp
+  
 
 startPage: https://${env.domain}/?bootstrap=${fn.uuid}#token=${globals.gatewayToken}
 
