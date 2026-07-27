@@ -12,7 +12,7 @@ buttons:
   - name: configure
     caption: Configure
     settings: main
-    confirmText: Apply provider configuration? The OpenClaw container will be restarted.
+    confirmText: Apply provider configuration?
     loadingText: Configuring AI models...
     action: configure
 
