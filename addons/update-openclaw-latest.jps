@@ -3,8 +3,6 @@ id: update-openclaw-latest
 name: Update OpenClaw to Latest
 description: Upgrade the OpenClaw CLI inside the running container and restart the gateway.
 
-baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
-
 targetNodes:
   nodeGroup: cp
 

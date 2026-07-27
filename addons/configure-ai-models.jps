@@ -3,8 +3,6 @@ id: configure-ai-models
 name: Configure AI Models
 description: Register OpenAI, OpenRouter, Anthropic, Gemini, and Grok providers via onboard.
 
-baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
-
 targetNodes:
   nodeGroup: cp
 
