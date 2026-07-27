@@ -3,16 +3,23 @@ import org.json.JSONObject;
 // configure-ai-models addon — settings.fields index map:
 // 0: currentModels (displayfield)
 // 1: apiKeyHint (displayfield)
-// 2: openaiApiKey (string/password)
-// 3: openrouterApiKey (string/password)
-// 4: anthropicApiKey (string/password)
-// 5: geminiApiKey (string/password)
-// 6: grokApiKey (string/password)
+// 2: provider (list)
+// 3: apiKey (string)
+// 4: onboardAuthChoice (hidden list)
+// 5: envVarName (hidden list)
 
 var settings = jps.settings || { fields: [] };
 var fields = settings.fields || (settings.main && settings.main.fields) || [];
 var cpNodeId = ${nodes.cp.master.id};
 var envName = "${env.name}";
+
+var PROVIDER_PREFIX = {
+    openai: "openai/",
+    openrouter: "openrouter/",
+    anthropic: "anthropic/",
+    gemini: "google/",
+    grok: "xai/"
+};
 
 function execOnCp(command) {
     return api.env.control.ExecCmdById(
@@ -35,6 +42,20 @@ function readDefaultModel(statusObj) {
     return "";
 }
 
+function providerFromModel(modelId) {
+    var id = String(modelId || "");
+    var key;
+
+    for (key in PROVIDER_PREFIX) {
+        if (!PROVIDER_PREFIX.hasOwnProperty(key)) continue;
+        if (id.indexOf(PROVIDER_PREFIX[key]) === 0) {
+            return key;
+        }
+    }
+
+    return "";
+}
+
 function buildStatusMarkup(statusObj, configuredModels) {
     var parts = [];
     var defaultModel = readDefaultModel(statusObj);
@@ -48,7 +69,7 @@ function buildStatusMarkup(statusObj, configuredModels) {
     if (configuredModels) {
         parts.push("<b>Configured models:</b><br/>" + String(configuredModels).replace(/\n/g, "<br/>"));
     } else {
-        parts.push("No configured models yet. Add an API key below to register a provider.");
+        parts.push("No configured models yet. Select a provider and add an API key below.");
     }
 
     return parts.join("<br/><br/>");
@@ -91,6 +112,11 @@ try {
 if (fields[0]) {
     fields[0].markup = buildStatusMarkup(statusObj, configuredOut);
     fields[0].cls = "info";
+}
+
+var currentProvider = providerFromModel(readDefaultModel(statusObj));
+if (currentProvider && fields[2]) {
+    fields[2].default = currentProvider;
 }
 
 return { result: 0, settings: settings };
