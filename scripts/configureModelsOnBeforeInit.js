@@ -5,8 +5,6 @@ import org.json.JSONObject;
 // 1: apiKeyHint (displayfield)
 // 2: provider (list)
 // 3: apiKey (string)
-// 4: onboardAuthChoice (hidden list)
-// 5: envVarName (hidden list)
 
 var settings = jps.settings || { fields: [] };
 var fields = settings.fields || (settings.main && settings.main.fields) || [];

@@ -47,40 +47,6 @@ settings:
       name: apiKey
       caption: API Key
       default: ""
-    - caption: None
-      inputType: hidden
-      hidden: true
-      type: list
-      name: onboardAuthChoice
-      dependsOn:
-        provider:
-          openai:
-            - value: openai-api-key
-          openrouter:
-            - value: openrouter-api-key
-          anthropic:
-            - value: apiKey
-          gemini:
-            - value: gemini-api-key
-          grok:
-            - value: xai-api-key
-    - caption: None
-      inputType: hidden
-      hidden: true
-      type: list
-      name: envVarName
-      dependsOn:
-        provider:
-          openai:
-            - value: OPENAI_API_KEY
-          openrouter:
-            - value: OPENROUTER_API_KEY
-          anthropic:
-            - value: ANTHROPIC_API_KEY
-          gemini:
-            - value: GEMINI_API_KEY
-          grok:
-            - value: XAI_API_KEY
 
 actions:
   configure:
@@ -91,26 +57,44 @@ actions:
 
         PROVIDER="${settings.provider}"
         FORM_KEY="${settings.apiKey}"
-        ONBOARD_AUTH="${settings.onboardAuthChoice}"
-        ENV_VAR="${settings.envVarName}"
+
+        case "$PROVIDER" in
+          openai)
+            PROVIDER_ID="openai"
+            ENV_VAR="OPENAI_API_KEY"
+            ONBOARD_AUTH="openai-api-key"
+            ;;
+          openrouter)
+            PROVIDER_ID="openrouter"
+            ENV_VAR="OPENROUTER_API_KEY"
+            ONBOARD_AUTH="openrouter-api-key"
+            ;;
+          anthropic)
+            PROVIDER_ID="anthropic"
+            ENV_VAR="ANTHROPIC_API_KEY"
+            ONBOARD_AUTH="apiKey"
+            ;;
+          gemini)
+            PROVIDER_ID="google"
+            ENV_VAR="GEMINI_API_KEY"
+            ONBOARD_AUTH="gemini-api-key"
+            ;;
+          grok)
+            PROVIDER_ID="xai"
+            ENV_VAR="XAI_API_KEY"
+            ONBOARD_AUTH="xai-api-key"
+            ;;
+          *)
+            echo "Unknown provider: $PROVIDER"
+            exit 1
+            ;;
+        esac
 
         API_KEY="$(printenv "$ENV_VAR" 2>/dev/null | tr -d '\r\n' || true)"
         if [ "$ENV_VAR" = "GEMINI_API_KEY" ] && [ -z "$API_KEY" ]; then
           API_KEY="$(printenv GOOGLE_API_KEY 2>/dev/null | tr -d '\r\n' || true)"
         fi
         [ -n "$FORM_KEY" ] && API_KEY="$(printf '%s' "$FORM_KEY" | tr -d '\r\n')"
-
-        case "$PROVIDER" in
-          openai) PROVIDER_ID="openai" ;;
-          openrouter) PROVIDER_ID="openrouter" ;;
-          anthropic) PROVIDER_ID="anthropic" ;;
-          gemini) PROVIDER_ID="google" ;;
-          grok) PROVIDER_ID="xai" ;;
-          *)
-            echo "Unknown provider: $PROVIDER"
-            exit 1
-            ;;
-        esac
 
         normalize_env_value() {
           printf '%s' "$1" | tr -d '\r\n' | sed 's/^"//; s/"$//'
