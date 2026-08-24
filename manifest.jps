@@ -269,22 +269,23 @@ startPage: https://${env.domain}/?bootstrap=${fn.uuid}#token=${globals.gatewayTo
 success: |
   OpenClaw has been installed on ${env.name}.
 
-  **Open in browser (device pairing)**:
+  **Control UI (browser access)** — use this link every time:
   [https://${env.domain}/?bootstrap=${fn.uuid}#token=${globals.gatewayToken}](<https://${env.domain}/?bootstrap=${fn.uuid}#token=${globals.gatewayToken}>)
 
-  **Access card**:    
-  **Token**: ${globals.gatewayToken}    
-  **Password**: ${globals.gatewayPassword}    
+  Use this link for device pairing.
 
-  Keep these values somewhere safe. They are the credentials for first login and
-  for reconnecting later. Use the pairing link above for first-time browser access;
-  token and password alone do not complete device pairing.
+  **Gateway credentials (CLI / API only)**:
+  **Token**: ${globals.gatewayToken}
+  **Password**: ${globals.gatewayPassword}
+
+  Keep these values safe. They authenticate gateway API and CLI access, not browser
+  login. For the Control UI, always use the pairing link above.
 
   **Notes:**
 
-  * OpenClaw is already configured for browser-first access.
-  * The browser button and the pairing link above use the same bootstrap URL to avoid stale browser auth state.
-  * The Add-ons tab includes an "Update OpenClaw to Latest" action for future upgrades.
+  * The Open in browser button uses the same pairing link as above.
+  * Configure AI models from Add-ons → Configure AI Models.
+  * Add-ons also includes Update OpenClaw to Latest for future upgrades.
   * Built-in SSL is enabled.
   * The node does not use a public IP.
   * Docker restart policy is set to unless-stopped.
