@@ -212,6 +212,45 @@ actions:
           fi
         }
 
+        sync_auth_profile_env_ref() {
+          node <<'NODE'
+        const fs = require("fs");
+        const authPath = "/home/node/.openclaw/agents/main/agent/auth-profiles.json";
+        const profileKey = process.env.AUTH_PROFILE_KEY || "";
+        const envVar = process.env.AUTH_ENV_VAR || "";
+        if (!profileKey || !envVar) process.exit(0);
+
+        let data;
+        try {
+          data = JSON.parse(fs.readFileSync(authPath, "utf8"));
+        } catch {
+          process.exit(0);
+        }
+
+        const profiles = data.profiles || data;
+        const profile = profiles[profileKey];
+        if (!profile) process.exit(0);
+
+        const envRef = { source: "env", provider: "default", id: envVar };
+        let changed = false;
+
+        if (typeof profile.apiKey === "string") {
+          profile.apiKey = envRef;
+          changed = true;
+        } else if (profile.apiKey && typeof profile.apiKey === "object") {
+          if (profile.apiKey.source !== "env" || profile.apiKey.id !== envVar) {
+            profile.apiKey = envRef;
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          fs.writeFileSync(authPath, JSON.stringify(data, null, 2) + "\n");
+          console.log("Updated auth profile to env ref for " + profileKey);
+        }
+        NODE
+        }
+
         if [ "$RUN_ONBOARD" = "1" ]; then
           openclaw onboard --non-interactive --accept-risk \
             --mode local \
@@ -222,6 +261,8 @@ actions:
             --skip-bootstrap \
             --skip-skills \
             --skip-health
+        else
+          sync_auth_profile_env_ref
         fi
 
         echo "Setting default model to $TARGET_MODEL..."
@@ -242,6 +283,8 @@ actions:
             -e "ONBOARD_AUTH_CHOICE=$onboard_choice" \
             -e "RUN_ONBOARD=$run_onboard_flag" \
             -e "TARGET_MODEL=$TARGET_MODEL" \
+            -e "AUTH_PROFILE_KEY=${PROVIDER_ID}:default" \
+            -e "AUTH_ENV_VAR=$ENV_VAR" \
             "$OPENCLAW_IMAGE" \
             sh /tmp/openclaw-maint.sh
         }
@@ -272,16 +315,14 @@ actions:
         set_env_var "$ENV_VAR" "$API_KEY"
 
         should_onboard=0
-        if [ -n "$FORM_KEY" ]; then
-          should_onboard=1
-        elif ! provider_registered; then
+        if ! provider_registered; then
           should_onboard=1
         fi
 
         if [ "$should_onboard" = 1 ]; then
           echo "Running onboard for $PROVIDER ($ONBOARD_AUTH)..."
         else
-          echo "Provider $PROVIDER already registered; syncing env and default model."
+          echo "Provider $PROVIDER already registered; updating env key and default model (no onboard)."
         fi
         run_maintenance "$ONBOARD_AUTH" "$should_onboard"
 
