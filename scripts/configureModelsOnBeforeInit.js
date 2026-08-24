@@ -9,8 +9,7 @@ import org.json.JSONObject;
 
 var settings = jps.settings || { fields: [] };
 var fields = settings.fields || (settings.main && settings.main.fields) || [];
-var cpNodeId = ${nodes.cp.master.id};
-var envName = "${env.name}";
+var envName = String((typeof env !== "undefined" && env && (env.envName || env.name)) || "");
 
 var PROVIDER_PREFIX = {
     openai: "openai/",
@@ -29,14 +28,22 @@ var PROVIDER_ID = {
 };
 
 function execOnCp(command) {
-    return api.env.control.ExecCmdById(
+    return api.env.control.ExecCmdByGroup(
         envName,
         session,
-        cpNodeId,
+        "cp",
         toJSON([{ command: command, params: "" }]),
+        false,
         false,
         "root"
     );
+}
+
+function readCommandOutput(resp) {
+    if (!resp || !resp.responses || !resp.responses.length) {
+        return "";
+    }
+    return String(resp.responses[0].out || "");
 }
 
 function readDefaultModel(statusObj) {
@@ -111,7 +118,7 @@ function buildModelValues(listJson) {
         seen[key] = true;
         caption = model.name ? String(model.name) + " (" + key + ")" : key;
         if (model.available === false) {
-            caption = caption + " — needs API key";
+            caption = caption + " (needs API key)";
         }
         values.push({ value: key, caption: caption });
     }
@@ -125,11 +132,16 @@ function setWarning(markup) {
     fields[0].cls = "warning";
 }
 
+if (!envName) {
+    setWarning("Could not resolve environment name for model lookup.");
+    return { result: 0, settings: settings };
+}
+
 var containerCheckCmd = "docker inspect -f '{{.State.Running}}' openclaw 2>/dev/null || echo false";
 var respCheck = execOnCp(containerCheckCmd);
 if (respCheck.result != 0) return respCheck;
 
-if (String(respCheck.responses[0].out || "").trim() !== "true") {
+if (String(readCommandOutput(respCheck)).trim() !== "true") {
     setWarning("OpenClaw container is not running. Start the environment before configuring models.");
     return { result: 0, settings: settings };
 }
@@ -147,8 +159,8 @@ if (respStatus.result != 0) return respStatus;
 var respList = execOnCp(listCmd);
 if (respList.result != 0) return respList;
 
-var statusJson = String(respStatus.responses[0].out || "{}").trim();
-var listJson = String(respList.responses[0].out || "{}").trim();
+var statusJson = String(readCommandOutput(respStatus) || "{}").trim();
+var listJson = String(readCommandOutput(respList) || "{}").trim();
 var statusObj = null;
 var providerModels = [];
 
@@ -173,7 +185,7 @@ if (currentProvider) {
         listCmd = "docker exec openclaw sh -lc 'openclaw models list --json --provider " + providerId + " 2>/dev/null || echo {}'";
         respList = execOnCp(listCmd);
         if (respList.result != 0) return respList;
-        listJson = String(respList.responses[0].out || "{}").trim();
+        listJson = String(readCommandOutput(respList) || "{}").trim();
         try {
             providerModels = toNative(new JSONObject(listJson)).models || [];
         } catch (e3) {
