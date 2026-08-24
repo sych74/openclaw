@@ -1,7 +1,9 @@
 type: update
 id: configure-ai-models
 name: Configure AI Models
-description: Register OpenAI, OpenRouter, Anthropic, Gemini, and Grok providers via onboard.
+description: Register OpenAI, OpenRouter, Anthropic, Gemini, and Grok providers via onboard and set the agent default model.
+baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
+onBeforeInit: /scripts/configureModelsOnBeforeInit.js
 
 targetNodes:
   nodeGroup: cp
@@ -26,7 +28,7 @@ settings:
       name: apiKeyHint
       hideLabel: true
       cls: warning
-      markup: Select a provider and enter an API key.
+      markup: Select a provider, choose a model (or Auto), and enter an API key.
     - caption: Provider
       type: list
       name: provider
@@ -43,6 +45,14 @@ settings:
           caption: Gemini (Google)
         - value: grok
           caption: Grok (xAI)
+    - caption: Model
+      type: list
+      name: model
+      default: auto
+      required: true
+      values:
+        - value: auto
+          caption: Auto-select (recommended)
     - type: string
       name: apiKey
       caption: API Key
@@ -57,6 +67,7 @@ actions:
 
         PROVIDER="${settings.provider}"
         FORM_KEY="${settings.apiKey}"
+        FORM_MODEL="${settings.model}"
 
         case "$PROVIDER" in
           openai)
@@ -89,6 +100,11 @@ actions:
             exit 1
             ;;
         esac
+
+        SELECTED_MODEL="auto"
+        if [ -n "$FORM_MODEL" ] && [ "$FORM_MODEL" != "auto" ]; then
+          SELECTED_MODEL="$FORM_MODEL"
+        fi
 
         API_KEY="$(printenv "$ENV_VAR" 2>/dev/null | tr -d '\r\n' || true)"
         if [ "$ENV_VAR" = "GEMINI_API_KEY" ] && [ -z "$API_KEY" ]; then
@@ -173,8 +189,8 @@ actions:
           exit 1
         fi
 
-        ONBOARD_SCRIPT="$(mktemp /tmp/openclaw-onboard.XXXXXX.sh)"
-        cat > "$ONBOARD_SCRIPT" << 'OC_ONBOARD'
+        MAINT_SCRIPT="$(mktemp /tmp/openclaw-maint.XXXXXX.sh)"
+        cat > "$MAINT_SCRIPT" << 'OC_MAINT'
         #!/bin/sh
         set -eu
         export OPENCLAW_CONFIG_DIR=/home/node/.openclaw
@@ -183,28 +199,96 @@ actions:
         if ! command -v openclaw >/dev/null 2>&1; then
           npm install -g openclaw@latest
         fi
-        openclaw onboard --non-interactive --accept-risk \
-          --mode local \
-          --auth-choice "$ONBOARD_AUTH_CHOICE" \
-          --secret-input-mode ref \
-          --gateway-port "$OPENCLAW_GATEWAY_PORT" \
-          --gateway-bind lan \
-          --skip-bootstrap \
-          --skip-skills \
-          --skip-health
-        OC_ONBOARD
-        chmod 700 "$ONBOARD_SCRIPT"
 
-        run_onboard() {
+        restore_virtuozzo_gateway() {
+          openclaw config set gateway.mode local
+          openclaw config set gateway.bind lan
+          openclaw config set gateway.auth.mode token
+          openclaw config set gateway.auth.token "${OPENCLAW_GATEWAY_TOKEN}"
+          openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true
+          openclaw config set gateway.trustedProxies '["127.0.0.1"]'
+          if [ -n "${OPENCLAW_GATEWAY_PASSWORD:-}" ]; then
+            openclaw config set gateway.auth.password "${OPENCLAW_GATEWAY_PASSWORD}" || true
+          fi
+        }
+
+        resolve_auto_model() {
+          node <<'NODE'
+        const { execSync } = require("node:child_process");
+
+        const provider = process.env.PROVIDER_ID || "";
+        const raw = execSync(`openclaw models list --json --provider ${provider}`, {
+          encoding: "utf8",
+        });
+        const data = JSON.parse(raw);
+        const models = Array.isArray(data.models) ? data.models : [];
+
+        const score = (key, available) => {
+          let s = available ? 200 : 0;
+          if (key.includes("/auto")) s += 100;
+          if (/flash/i.test(key) && !/2\.5-flash/.test(key)) s += 50;
+          if (/sonnet/i.test(key)) s += 40;
+          if (/lite/i.test(key)) s += 15;
+          if (/2\.5-flash/.test(key)) s -= 40;
+          if (/beta/i.test(key)) s -= 15;
+          if (/opus/i.test(key)) s -= 10;
+          return s;
+        };
+
+        const ranked = models
+          .filter((model) => model && model.key)
+          .map((model) => ({
+            key: String(model.key),
+            score: score(String(model.key), Boolean(model.available)),
+          }))
+          .sort((a, b) => b.score - a.score);
+
+        if (!ranked.length) {
+          process.stderr.write(`No models returned for provider ${provider}\n`);
+          process.exit(1);
+        }
+
+        process.stdout.write(ranked[0].key);
+        NODE
+        }
+
+        if [ "${RUN_ONBOARD:-0}" = "1" ]; then
+          openclaw onboard --non-interactive --accept-risk \
+            --mode local \
+            --auth-choice "$ONBOARD_AUTH_CHOICE" \
+            --secret-input-mode ref \
+            --gateway-port "$OPENCLAW_GATEWAY_PORT" \
+            --gateway-bind lan \
+            --skip-bootstrap \
+            --skip-skills \
+            --skip-health
+        fi
+
+        TARGET_MODEL="${SELECTED_MODEL}"
+        if [ "$TARGET_MODEL" = "auto" ]; then
+          TARGET_MODEL="$(resolve_auto_model)"
+        fi
+
+        echo "Setting default model to ${TARGET_MODEL}..."
+        openclaw models set "${TARGET_MODEL}"
+        restore_virtuozzo_gateway
+        OC_MAINT
+        chmod 700 "$MAINT_SCRIPT"
+
+        run_maintenance() {
           onboard_choice="$1"
+          run_onboard_flag="$2"
           docker run --rm \
             -u root \
             -v "$OPENCLAW_MOUNT:/home/node/.openclaw" \
-            -v "$ONBOARD_SCRIPT:/tmp/openclaw-onboard.sh:ro" \
+            -v "$MAINT_SCRIPT:/tmp/openclaw-maint.sh:ro" \
             --env-file "$ENV_FILE" \
             -e "ONBOARD_AUTH_CHOICE=$onboard_choice" \
+            -e "RUN_ONBOARD=$run_onboard_flag" \
+            -e "PROVIDER_ID=$PROVIDER_ID" \
+            -e "SELECTED_MODEL=$SELECTED_MODEL" \
             "$OPENCLAW_IMAGE" \
-            sh /tmp/openclaw-onboard.sh
+            sh /tmp/openclaw-maint.sh
         }
 
         recreate_openclaw_container() {
@@ -241,10 +325,10 @@ actions:
 
         if [ "$should_onboard" = 1 ]; then
           echo "Running onboard for $PROVIDER ($ONBOARD_AUTH)..."
-          run_onboard "$ONBOARD_AUTH"
         else
-          echo "Provider $PROVIDER already registered; syncing env only."
+          echo "Provider $PROVIDER already registered; syncing env and default model."
         fi
+        run_maintenance "$ONBOARD_AUTH" "$should_onboard"
 
         strip_onboard_vars
         normalize_env_file
@@ -259,4 +343,4 @@ actions:
 
         docker exec openclaw sh -lc 'openclaw models status' || true
 
-        rm -f "$ONBOARD_SCRIPT"
+        rm -f "$MAINT_SCRIPT"

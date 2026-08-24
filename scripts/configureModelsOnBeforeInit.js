@@ -4,7 +4,8 @@ import org.json.JSONObject;
 // 0: currentModels (displayfield)
 // 1: apiKeyHint (displayfield)
 // 2: provider (list)
-// 3: apiKey (string)
+// 3: model (list)
+// 4: apiKey (string)
 
 var settings = jps.settings || { fields: [] };
 var fields = settings.fields || (settings.main && settings.main.fields) || [];
@@ -17,6 +18,14 @@ var PROVIDER_PREFIX = {
     anthropic: "anthropic/",
     gemini: "google/",
     grok: "xai/"
+};
+
+var PROVIDER_ID = {
+    openai: "openai",
+    openrouter: "openrouter",
+    anthropic: "anthropic",
+    gemini: "google",
+    grok: "xai"
 };
 
 function execOnCp(command) {
@@ -34,6 +43,7 @@ function readDefaultModel(statusObj) {
     if (!statusObj) return "";
 
     if (statusObj.defaultModel) return String(statusObj.defaultModel);
+    if (statusObj.resolvedDefault) return String(statusObj.resolvedDefault);
     if (statusObj.default) return String(statusObj.default);
     if (statusObj.model) return String(statusObj.model);
     if (statusObj.primary) return String(statusObj.primary);
@@ -54,7 +64,7 @@ function providerFromModel(modelId) {
     return "";
 }
 
-function buildStatusMarkup(statusObj, configuredModels) {
+function buildStatusMarkup(statusObj, providerModels) {
     var parts = [];
     var defaultModel = readDefaultModel(statusObj);
 
@@ -64,13 +74,49 @@ function buildStatusMarkup(statusObj, configuredModels) {
         parts.push("<b>Current default model:</b> not set");
     }
 
-    if (configuredModels) {
-        parts.push("<b>Configured models:</b><br/>" + String(configuredModels).replace(/\n/g, "<br/>"));
+    if (providerModels && providerModels.length) {
+        parts.push("<b>Models for selected provider:</b> " + providerModels.length);
     } else {
-        parts.push("No configured models yet. Select a provider and add an API key below.");
+        parts.push("No models returned for the selected provider yet.");
     }
 
     return parts.join("<br/><br/>");
+}
+
+function buildModelValues(listJson) {
+    var values = [{ value: "auto", caption: "Auto-select (recommended)" }];
+    var data = null;
+    var models = [];
+    var seen = { auto: true };
+    var i;
+    var model;
+    var key;
+    var caption;
+
+    try {
+        data = toNative(new JSONObject(String(listJson || "{}")));
+    } catch (e) {
+        return values;
+    }
+
+    if (data && data.models && data.models.length) {
+        models = data.models;
+    }
+
+    for (i = 0; i < models.length; i++) {
+        model = models[i];
+        if (!model || !model.key) continue;
+        key = String(model.key);
+        if (seen[key]) continue;
+        seen[key] = true;
+        caption = model.name ? String(model.name) + " (" + key + ")" : key;
+        if (model.available === false) {
+            caption = caption + " — needs API key";
+        }
+        values.push({ value: key, caption: caption });
+    }
+
+    return values;
 }
 
 function setWarning(markup) {
@@ -88,33 +134,70 @@ if (String(respCheck.responses[0].out || "").trim() !== "true") {
     return { result: 0, settings: settings };
 }
 
-var listCmd = "docker exec openclaw sh -lc 'openclaw models list --plain 2>/dev/null || true'";
+var defaultModel = "";
+var currentProvider = "";
+var selectedProvider = (fields[2] && fields[2].default) || "openai";
+var providerId = PROVIDER_ID[selectedProvider] || "openai";
 var statusCmd = "docker exec openclaw sh -lc 'openclaw models status --json 2>/dev/null || echo {}'";
-
-var respList = execOnCp(listCmd);
-if (respList.result != 0) return respList;
+var listCmd = "docker exec openclaw sh -lc 'openclaw models list --json --provider " + providerId + " 2>/dev/null || echo {}'";
 
 var respStatus = execOnCp(statusCmd);
 if (respStatus.result != 0) return respStatus;
 
-var configuredOut = String(respList.responses[0].out || "").trim();
-var statusJson = String(respStatus.responses[0].out || "{}").trim();
+var respList = execOnCp(listCmd);
+if (respList.result != 0) return respList;
 
+var statusJson = String(respStatus.responses[0].out || "{}").trim();
+var listJson = String(respList.responses[0].out || "{}").trim();
 var statusObj = null;
+var providerModels = [];
+
 try {
     statusObj = toNative(new JSONObject(statusJson));
 } catch (e) {
     statusObj = null;
 }
 
+try {
+    providerModels = toNative(new JSONObject(listJson)).models || [];
+} catch (e2) {
+    providerModels = [];
+}
+
+defaultModel = readDefaultModel(statusObj);
+currentProvider = providerFromModel(defaultModel);
+if (currentProvider) {
+    selectedProvider = currentProvider;
+    providerId = PROVIDER_ID[selectedProvider] || providerId;
+    if (currentProvider !== ((fields[2] && fields[2].default) || "")) {
+        listCmd = "docker exec openclaw sh -lc 'openclaw models list --json --provider " + providerId + " 2>/dev/null || echo {}'";
+        respList = execOnCp(listCmd);
+        if (respList.result != 0) return respList;
+        listJson = String(respList.responses[0].out || "{}").trim();
+        try {
+            providerModels = toNative(new JSONObject(listJson)).models || [];
+        } catch (e3) {
+            providerModels = [];
+        }
+    }
+}
+
 if (fields[0]) {
-    fields[0].markup = buildStatusMarkup(statusObj, configuredOut);
+    fields[0].markup = buildStatusMarkup(statusObj, providerModels);
     fields[0].cls = "info";
 }
 
-var currentProvider = providerFromModel(readDefaultModel(statusObj));
-if (currentProvider && fields[2]) {
-    fields[2].default = currentProvider;
+if (fields[2]) {
+    fields[2].default = selectedProvider;
+}
+
+if (fields[3]) {
+    fields[3].values = buildModelValues(listJson);
+    if (defaultModel && providerFromModel(defaultModel) === selectedProvider) {
+        fields[3].default = defaultModel;
+    } else {
+        fields[3].default = "auto";
+    }
 }
 
 return { result: 0, settings: settings };

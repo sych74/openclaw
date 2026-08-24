@@ -267,7 +267,10 @@ onInstall:
 startPage: https://${env.domain}/?bootstrap=${fn.uuid}#token=${globals.gatewayToken}
 
 success: |
-  OpenClaw has been installed.
+  OpenClaw has been installed on ${env.name}.
+
+  Open in browser (device pairing):
+    https://${env.domain}/?bootstrap=${fn.uuid}#token=${globals.gatewayToken}
 
   Access card:
 
@@ -278,12 +281,13 @@ success: |
     ${globals.gatewayPassword}
 
   Keep these values somewhere safe. They are the credentials for first login and
-  for reconnecting later.
+  for reconnecting later. Use the pairing link above for first-time browser access;
+  token and password alone do not complete device pairing.
 
   Notes:
 
   * OpenClaw is already configured for browser-first access.
-  * The browser button opens the app directly using the saved token. The unique bootstrap URL avoids stale browser auth state.
+  * The browser button and the pairing link above use the same bootstrap URL to avoid stale browser auth state.
   * The Add-ons tab includes an "Update OpenClaw to Latest" action for future upgrades.
   * Built-in SSL is enabled.
   * The node does not use a public IP.
