@@ -70,26 +70,15 @@ function providerFromModel(modelId) {
     return "";
 }
 
-function buildStatusMarkup(statusObj, totalModels) {
-    var parts = [];
-    var defaultModel = readDefaultModel(statusObj);
-
-    if (defaultModel) {
-        parts.push("Current default model: " + defaultModel);
-    } else {
-        parts.push("Current default model: not set");
-    }
-
-    parts.push("Loaded model catalogs: " + totalModels + " entries across providers");
-
-    return parts.join("\n");
+function buildStatusMarkup(totalModels) {
+    return "Loaded model catalogs: " + totalModels + " entries across providers.";
 }
 
 function buildModelValues(listJson) {
-    var values = [{ value: "auto", caption: "Auto-select (recommended)" }];
     var data = null;
     var models = [];
-    var seen = { auto: true };
+    var values = [];
+    var seen = {};
     var i;
     var model;
     var key;
@@ -121,6 +110,20 @@ function buildModelValues(listJson) {
     return values;
 }
 
+function listHasModel(providerList, modelId) {
+    var i;
+
+    if (!providerList || !modelId) return false;
+
+    for (i = 0; i < providerList.length; i++) {
+        if (providerList[i] && providerList[i].value === modelId) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function setWarning(markup) {
     if (!fields[0]) return;
     fields[0].markup = markup;
@@ -145,8 +148,8 @@ var statusObj = null;
 var modelsByProvider = {};
 var totalModels = 0;
 var defaultModel = "";
-var currentProvider = "";
 var selectedProvider = "openai";
+var providerList = [];
 var i;
 var providerKey;
 var providerId;
@@ -161,9 +164,8 @@ try {
 }
 
 defaultModel = readDefaultModel(statusObj);
-currentProvider = providerFromModel(defaultModel);
-if (currentProvider) {
-    selectedProvider = currentProvider;
+if (providerFromModel(defaultModel)) {
+    selectedProvider = providerFromModel(defaultModel);
 }
 
 for (i = 0; i < PROVIDER_KEYS.length; i++) {
@@ -174,11 +176,13 @@ for (i = 0; i < PROVIDER_KEYS.length; i++) {
     if (respList.result != 0) return respList;
     listJson = String(readCommandOutput(respList) || "{}").trim();
     modelsByProvider[providerKey] = buildModelValues(listJson);
-    totalModels += Math.max(0, modelsByProvider[providerKey].length - 1);
+    totalModels += modelsByProvider[providerKey].length;
 }
 
+providerList = modelsByProvider[selectedProvider] || [];
+
 if (fields[0]) {
-    fields[0].markup = buildStatusMarkup(statusObj, totalModels);
+    fields[0].markup = buildStatusMarkup(totalModels);
     fields[0].cls = "info";
 }
 
@@ -188,11 +192,9 @@ if (fields[2]) {
 
 if (fields[3]) {
     fields[3].dependsOn = { provider: modelsByProvider };
-    fields[3].values = [{ value: "auto", caption: "Auto-select (recommended)" }];
-    if (defaultModel && providerFromModel(defaultModel) === selectedProvider) {
+    fields[3].values = providerList;
+    if (listHasModel(providerList, defaultModel)) {
         fields[3].default = defaultModel;
-    } else {
-        fields[3].default = "auto";
     }
 }
 

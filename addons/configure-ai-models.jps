@@ -28,7 +28,7 @@ settings:
         name: apiKeyHint
         hideLabel: true
         cls: warning
-        markup: Select a provider, choose a model (or Auto), and enter an API key.
+        markup: Select a provider, choose a model, and enter an API key.
       - caption: Provider
         type: list
         name: provider
@@ -48,11 +48,8 @@ settings:
       - caption: Model
         type: list
         name: model
-        default: auto
         required: true
-        values:
-          - value: auto
-            caption: Auto-select (recommended)
+        values: []
       - type: string
         name: apiKey
         caption: API Key
@@ -68,7 +65,6 @@ actions:
 
         PROVIDER="${settings.provider}"
         FORM_KEY="${settings.apiKey}"
-        FORM_MODEL="${settings.model}"
 
         case "$PROVIDER" in
           openai)
@@ -102,9 +98,11 @@ actions:
             ;;
         esac
 
-        SELECTED_MODEL="auto"
-        if [ -n "$FORM_MODEL" ] && [ "$FORM_MODEL" != "auto" ]; then
-          SELECTED_MODEL="$FORM_MODEL"
+        TARGET_MODEL="${settings.model}"
+
+        if [ -z "$TARGET_MODEL" ]; then
+          echo "Select a model for provider $PROVIDER."
+          exit 1
         fi
 
         API_KEY="$(printenv "$ENV_VAR" 2>/dev/null | tr -d '\r\n' || true)"
@@ -213,46 +211,6 @@ actions:
           fi
         }
 
-        resolve_auto_model() {
-          node <<'NODE'
-        const { execSync } = require("node:child_process");
-
-        const provider = process.env.PROVIDER_ID || "";
-        const raw = execSync(`openclaw models list --json --provider ${provider}`, {
-          encoding: "utf8",
-        });
-        const data = JSON.parse(raw);
-        const models = Array.isArray(data.models) ? data.models : [];
-
-        const score = (key, available) => {
-          let s = available ? 200 : 0;
-          if (key.includes("/auto")) s += 100;
-          if (/flash/i.test(key) && !/2\.5-flash/.test(key)) s += 50;
-          if (/sonnet/i.test(key)) s += 40;
-          if (/lite/i.test(key)) s += 15;
-          if (/2\.5-flash/.test(key)) s -= 40;
-          if (/beta/i.test(key)) s -= 15;
-          if (/opus/i.test(key)) s -= 10;
-          return s;
-        };
-
-        const ranked = models
-          .filter((model) => model && model.key)
-          .map((model) => ({
-            key: String(model.key),
-            score: score(String(model.key), Boolean(model.available)),
-          }))
-          .sort((a, b) => b.score - a.score);
-
-        if (!ranked.length) {
-          process.stderr.write(`No models returned for provider ${provider}\n`);
-          process.exit(1);
-        }
-
-        process.stdout.write(ranked[0].key);
-        NODE
-        }
-
         if [ "${RUN_ONBOARD:-0}" = "1" ]; then
           openclaw onboard --non-interactive --accept-risk \
             --mode local \
@@ -263,11 +221,6 @@ actions:
             --skip-bootstrap \
             --skip-skills \
             --skip-health
-        fi
-
-        TARGET_MODEL="${SELECTED_MODEL}"
-        if [ "$TARGET_MODEL" = "auto" ]; then
-          TARGET_MODEL="$(resolve_auto_model)"
         fi
 
         echo "Setting default model to ${TARGET_MODEL}..."
@@ -286,8 +239,7 @@ actions:
             --env-file "$ENV_FILE" \
             -e "ONBOARD_AUTH_CHOICE=$onboard_choice" \
             -e "RUN_ONBOARD=$run_onboard_flag" \
-            -e "PROVIDER_ID=$PROVIDER_ID" \
-            -e "SELECTED_MODEL=$SELECTED_MODEL" \
+            -e "TARGET_MODEL=$TARGET_MODEL" \
             "$OPENCLAW_IMAGE" \
             sh /tmp/openclaw-maint.sh
         }
