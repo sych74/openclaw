@@ -3,7 +3,6 @@ id: configure-ai-models
 name: Configure AI Models
 description: Register OpenAI, OpenRouter, Anthropic, Gemini, and Grok providers via onboard and set the agent default model.
 baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
-onBeforeInit: /scripts/configureModelsOnBeforeInit.js
 
 targetNodes:
   nodeGroup: cp
@@ -57,6 +56,7 @@ settings:
       name: apiKey
       caption: API Key
       default: ""
+  onBeforeInit: /scripts/configureModelsOnBeforeInit.js
 
 actions:
   configure:

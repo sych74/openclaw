@@ -7,19 +7,10 @@ import org.json.JSONObject;
 // 3: model (list)
 // 4: apiKey (string)
 
-// envName and cpNodeId are set by inline onBeforeInit bootstrap in configure-ai-models.jps
-if (typeof envName === "undefined") {
-    envName = "";
-}
-if (!envName) {
-    envName = String((typeof env !== "undefined" && env && (env.envName || env.name)) || "");
-}
-if (typeof cpNodeId === "undefined") {
-    cpNodeId = 0;
-}
-
 var settings = jps.settings || { fields: [] };
 var fields = settings.fields || (settings.main && settings.main.fields) || [];
+var envName = String(env.envName || "");
+var cpNodeId = nodes.cp.master.id;
 
 var PROVIDER_PREFIX = {
     openai: "openai/",
@@ -142,7 +133,7 @@ function setWarning(markup) {
 }
 
 if (!envName || !cpNodeId) {
-    setWarning("Select a target environment below, then reopen this dialog to load models from the OpenClaw container.");
+    setWarning("OpenClaw environment context is unavailable. Open Configure from the environment Add-ons tab.");
     return { result: 0, settings: settings };
 }
 
