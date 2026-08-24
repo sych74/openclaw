@@ -192,6 +192,7 @@ actions:
         cat > "$MAINT_SCRIPT" << 'OC_MAINT'
         #!/bin/sh
         set -eu
+        export HOME=/home/node
         export OPENCLAW_CONFIG_DIR=/home/node/.openclaw
         export OPENCLAW_WORKSPACE_DIR=/home/node/.openclaw/workspace
         mkdir -p /home/node/.openclaw/workspace /home/node/.openclaw/devices
@@ -203,15 +204,15 @@ actions:
           openclaw config set gateway.mode local
           openclaw config set gateway.bind lan
           openclaw config set gateway.auth.mode token
-          openclaw config set gateway.auth.token "${OPENCLAW_GATEWAY_TOKEN}"
+          openclaw config set gateway.auth.token "$OPENCLAW_GATEWAY_TOKEN"
           openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true
           openclaw config set gateway.trustedProxies '["127.0.0.1"]'
-          if [ -n "${OPENCLAW_GATEWAY_PASSWORD:-}" ]; then
-            openclaw config set gateway.auth.password "${OPENCLAW_GATEWAY_PASSWORD}" || true
+          if [ -n "$OPENCLAW_GATEWAY_PASSWORD" ]; then
+            openclaw config set gateway.auth.password "$OPENCLAW_GATEWAY_PASSWORD" || true
           fi
         }
 
-        if [ "${RUN_ONBOARD:-0}" = "1" ]; then
+        if [ "$RUN_ONBOARD" = "1" ]; then
           openclaw onboard --non-interactive --accept-risk \
             --mode local \
             --auth-choice "$ONBOARD_AUTH_CHOICE" \
@@ -223,8 +224,8 @@ actions:
             --skip-health
         fi
 
-        echo "Setting default model to ${TARGET_MODEL}..."
-        openclaw models set "${TARGET_MODEL}"
+        echo "Setting default model to $TARGET_MODEL..."
+        openclaw models set "$TARGET_MODEL"
         restore_virtuozzo_gateway
         OC_MAINT
         chmod 700 "$MAINT_SCRIPT"
@@ -234,6 +235,7 @@ actions:
           run_onboard_flag="$2"
           docker run --rm \
             -u root \
+            -e HOME=/home/node \
             -v "$OPENCLAW_MOUNT:/home/node/.openclaw" \
             -v "$MAINT_SCRIPT:/tmp/openclaw-maint.sh:ro" \
             --env-file "$ENV_FILE" \
@@ -293,6 +295,10 @@ actions:
           fi
           sleep 2
         done
+
+        docker exec \
+          -e TARGET_MODEL="$TARGET_MODEL" \
+          openclaw sh -lc 'openclaw models set "$TARGET_MODEL"' || true
 
         docker exec openclaw sh -lc 'openclaw models status' || true
 
