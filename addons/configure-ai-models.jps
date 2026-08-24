@@ -10,53 +10,54 @@ targetNodes:
 buttons:
   - name: configure
     caption: Configure
-    settings: main
+    settings: configure
     confirmText: Apply provider configuration?
     loadingText: Configuring AI models...
     action: configure
 
 settings:
-  submitUnchanged: true
-  fields:
-    - type: displayfield
-      name: currentModels
-      hideLabel: true
-      cls: info
-      markup: Loading current model configuration...
-    - type: displayfield
-      name: apiKeyHint
-      hideLabel: true
-      cls: warning
-      markup: Select a provider, choose a model (or Auto), and enter an API key.
-    - caption: Provider
-      type: list
-      name: provider
-      default: openai
-      required: true
-      values:
-        - value: openai
-          caption: OpenAI
-        - value: openrouter
-          caption: OpenRouter
-        - value: anthropic
-          caption: Anthropic
-        - value: gemini
-          caption: Gemini (Google)
-        - value: grok
-          caption: Grok (xAI)
-    - caption: Model
-      type: list
-      name: model
-      default: auto
-      required: true
-      values:
-        - value: auto
-          caption: Auto-select (recommended)
-    - type: string
-      name: apiKey
-      caption: API Key
-      default: ""
-  onBeforeInit: /scripts/configureModelsOnBeforeInit.js
+  configure:
+    submitUnchanged: true
+    fields:
+      - type: displayfield
+        name: currentModels
+        hideLabel: true
+        cls: info
+        markup: Loading current model configuration...
+      - type: displayfield
+        name: apiKeyHint
+        hideLabel: true
+        cls: warning
+        markup: Select a provider, choose a model (or Auto), and enter an API key.
+      - caption: Provider
+        type: list
+        name: provider
+        default: openai
+        required: true
+        values:
+          - value: openai
+            caption: OpenAI
+          - value: openrouter
+            caption: OpenRouter
+          - value: anthropic
+            caption: Anthropic
+          - value: gemini
+            caption: Gemini (Google)
+          - value: grok
+            caption: Grok (xAI)
+      - caption: Model
+        type: list
+        name: model
+        default: auto
+        required: true
+        values:
+          - value: auto
+            caption: Auto-select (recommended)
+      - type: string
+        name: apiKey
+        caption: API Key
+        default: ""
+    onBeforeInit: /scripts/configureModelsOnBeforeInit.js
 
 actions:
   configure:

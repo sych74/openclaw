@@ -7,10 +7,7 @@ import org.json.JSONObject;
 // 3: model (list)
 // 4: apiKey (string)
 
-var settings = jps.settings || { fields: [] };
-var fields = settings.fields || (settings.main && settings.main.fields) || [];
-var envName = String(env.envName || "");
-var cpNodeId = nodes.cp.master.id;
+var fields = settings.fields || [];
 
 var PROVIDER_PREFIX = {
     openai: "openai/",
@@ -30,9 +27,9 @@ var PROVIDER_ID = {
 
 function execOnCp(command) {
     return api.env.control.ExecCmdById(
-        envName,
+        "${env.name}",
         session,
-        cpNodeId,
+        ${targetNodes.master.id},
         toJSON([{ command: command, params: "" }]),
         false,
         "root"
@@ -132,18 +129,13 @@ function setWarning(markup) {
     fields[0].cls = "warning";
 }
 
-if (!envName || !cpNodeId) {
-    setWarning("OpenClaw environment context is unavailable. Open Configure from the environment Add-ons tab.");
-    return { result: 0, settings: settings };
-}
-
 var containerCheckCmd = "docker inspect -f '{{.State.Running}}' openclaw 2>/dev/null || echo false";
 var respCheck = execOnCp(containerCheckCmd);
 if (respCheck.result != 0) return respCheck;
 
 if (String(readCommandOutput(respCheck)).trim() !== "true") {
     setWarning("OpenClaw container is not running. Start the environment before configuring models.");
-    return { result: 0, settings: settings };
+    return settings;
 }
 
 var defaultModel = "";
@@ -212,4 +204,4 @@ if (fields[3]) {
     }
 }
 
-return { result: 0, settings: settings };
+return settings;
