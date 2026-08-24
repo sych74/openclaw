@@ -7,6 +7,20 @@ baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
 targetNodes:
   nodeGroup: cp
 
+responses:
+  200:
+    type: success
+    message: Default model configured successfully.
+  97:
+    type: warning
+    message: Provide an API key in the form or as a platform environment variable on this node.
+  98:
+    type: warning
+    message: API key was rejected by the provider (invalid or revoked).
+  99:
+    type: warning
+    message: Configuration failed. OpenClaw gateway was not changed.
+
 buttons:
   - name: configure
     caption: Configure
@@ -59,7 +73,16 @@ settings:
 actions:
   configure:
     - cmd[cp]: |-
+        RESULT_FILE="/tmp/openclaw-configure.result"
+        echo 99 > "$RESULT_FILE"
+
+        (
         set -eu
+
+        oc_finish() {
+          echo "$1" > "$RESULT_FILE"
+          exit "$1"
+        }
 
         ENV_FILE="/root/openclaw.env"
 
@@ -94,7 +117,7 @@ actions:
             ;;
           *)
             echo "Unknown provider: $PROVIDER"
-            exit 1
+            oc_finish 99
             ;;
         esac
 
@@ -102,7 +125,7 @@ actions:
 
         if [ -z "$TARGET_MODEL" ]; then
           echo "Select a model for provider $PROVIDER."
-          exit 1
+          oc_finish 99
         fi
 
         API_KEY="$(printenv "$ENV_VAR" 2>/dev/null | tr -d '\r\n' || true)"
@@ -167,7 +190,7 @@ actions:
 
         if ! docker inspect openclaw >/dev/null 2>&1; then
           echo "OpenClaw container was not found."
-          exit 1
+          oc_finish 99
         fi
 
         OPENCLAW_MOUNT="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/home/node/.openclaw"}}{{.Source}}{{end}}{{end}}' openclaw)"
@@ -180,12 +203,60 @@ actions:
 
         if [ -z "$OPENCLAW_MOUNT" ]; then
           echo "Could not detect OpenClaw data mount."
-          exit 1
+          oc_finish 99
+        fi
+
+        if [ -z "$API_KEY" ] && [ -f "$ENV_FILE" ]; then
+          env_line="$(grep "^${ENV_VAR}=" "$ENV_FILE" | tail -1 || true)"
+          if [ -n "$env_line" ]; then
+            API_KEY="$(normalize_env_value "${env_line#*=}")"
+          fi
+        fi
+        if [ "$ENV_VAR" = "GEMINI_API_KEY" ] && [ -z "$API_KEY" ] && [ -f "$ENV_FILE" ]; then
+          env_line="$(grep '^GOOGLE_API_KEY=' "$ENV_FILE" | tail -1 || true)"
+          if [ -n "$env_line" ]; then
+            API_KEY="$(normalize_env_value "${env_line#*=}")"
+          fi
         fi
 
         if [ -z "$API_KEY" ]; then
           echo "Provide an API key in the form or as platform environment variable $ENV_VAR on this node."
-          exit 1
+          oc_finish 97
+        fi
+
+        validate_api_key() {
+          case "$PROVIDER_ID" in
+            openai)
+              curl -fsS -o /dev/null -H "Authorization: Bearer $API_KEY" \
+                "https://api.openai.com/v1/models?limit=1"
+              ;;
+            anthropic)
+              curl -fsS -o /dev/null \
+                -H "x-api-key: $API_KEY" \
+                -H "anthropic-version: 2023-06-01" \
+                "https://api.anthropic.com/v1/models"
+              ;;
+            google)
+              curl -fsS -o /dev/null \
+                "https://generativelanguage.googleapis.com/v1/models?key=${API_KEY}&pageSize=1"
+              ;;
+            openrouter)
+              curl -fsS -o /dev/null -H "Authorization: Bearer $API_KEY" \
+                "https://openrouter.ai/api/v1/models"
+              ;;
+            xai)
+              curl -fsS -o /dev/null -H "Authorization: Bearer $API_KEY" \
+                "https://api.x.ai/v1/models"
+              ;;
+            *)
+              return 1
+              ;;
+          esac
+        }
+
+        if ! validate_api_key; then
+          echo "API key was rejected by the $PROVIDER provider (invalid or revoked)."
+          oc_finish 98
         fi
 
         MAINT_SCRIPT="$(mktemp /tmp/openclaw-maint.XXXXXX.sh)"
@@ -342,5 +413,30 @@ actions:
           openclaw sh -lc 'openclaw models set "$TARGET_MODEL"' || true
 
         docker exec openclaw sh -lc 'openclaw models status' || true
-
         rm -f "$MAINT_SCRIPT"
+
+        oc_finish 0
+        ) || true
+
+        exit 0
+    - script: |
+        var resp = api.env.control.ExecCmdById(
+          "${env.name}",
+          session,
+          ${targetNodes.master.id},
+          toJSON([{ command: "cat /tmp/openclaw-configure.result 2>/dev/null || echo 99", params: "" }]),
+          false,
+          "root"
+        );
+        if (resp.result != 0) return resp;
+        var out = (resp.responses && resp.responses[0]) ? String(resp.responses[0].out || "") : "";
+        var code = parseInt(out.trim(), 10);
+        if (isNaN(code)) code = 99;
+        if (code === 0) {
+          return {
+            result: 200,
+            type: "success",
+            message: "Default model **${settings.model}** is configured for **${settings.provider}**."
+          };
+        }
+        return { result: code, type: "warning" };
