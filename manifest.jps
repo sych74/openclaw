@@ -39,6 +39,11 @@ nodes:
       - /var/lib/docker
       - ${globals.stateDir}
 
+onBeforeClone:
+  stopEvent:
+    type: warning
+    message: Cloning is not supported for OpenClaw.
+
 onInstall:
   - cmd[cp]: |-
       set -eu
