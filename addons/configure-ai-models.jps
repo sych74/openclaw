@@ -279,7 +279,11 @@ actions:
           openclaw config set gateway.auth.mode token
           openclaw config set gateway.auth.token "$OPENCLAW_GATEWAY_TOKEN"
           openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true
-          openclaw config set gateway.trustedProxies '["127.0.0.1"]'
+          trusted_proxies='["127.0.0.1"]'
+          if [ -n "$DOCKER_BRIDGE_GATEWAY" ]; then
+            trusted_proxies="[\"127.0.0.1\",\"$DOCKER_BRIDGE_GATEWAY\"]"
+          fi
+          openclaw config set gateway.trustedProxies "$trusted_proxies"
           if [ -n "$OPENCLAW_GATEWAY_PASSWORD" ]; then
             openclaw config set gateway.auth.password "$OPENCLAW_GATEWAY_PASSWORD" || true
           fi

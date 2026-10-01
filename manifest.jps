@@ -94,6 +94,7 @@ onInstall:
         sleep 2
       done
       docker info >/dev/null
+      DOCKER_BRIDGE_GATEWAY="$(docker network inspect bridge -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null || true)"
       echo "Preparing persistent directories..."
       mkdir -p "${STATE_DIR}/workspace" "${STATE_DIR}/devices"
 
@@ -126,6 +127,7 @@ onInstall:
         printf 'OPENCLAW_GATEWAY_PASSWORD=%s\n' "$(normalize_env_value "${globals.gatewayPassword}")"
         printf 'OPENCLAW_GATEWAY_PORT=%s\n' "$(normalize_env_value "${CONTAINER_PORT}")"
         printf 'OPENCLAW_VERSION=%s\n' "$(normalize_env_value "${OPENCLAW_VERSION}")"
+        printf 'DOCKER_BRIDGE_GATEWAY=%s\n' "$(normalize_env_value "${DOCKER_BRIDGE_GATEWAY}")"
       } > "${ENV_FILE}"
       chmod 600 "${ENV_FILE}"
 
@@ -164,7 +166,12 @@ onInstall:
       openclaw config set gateway.auth.mode token
       openclaw config set gateway.auth.token "${OPENCLAW_GATEWAY_TOKEN}"
       openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true
-      openclaw config set gateway.trustedProxies '["127.0.0.1"]'
+      # Published ports reach the gateway through Docker NAT, so the proxy appears as the bridge gateway address.
+      TRUSTED_PROXIES='["127.0.0.1"]'
+      if [ -n "${DOCKER_BRIDGE_GATEWAY}" ]; then
+        TRUSTED_PROXIES="[\"127.0.0.1\",\"${DOCKER_BRIDGE_GATEWAY}\"]"
+      fi
+      openclaw config set gateway.trustedProxies "${TRUSTED_PROXIES}"
 
       if [ -n "${OPENCLAW_GATEWAY_PASSWORD}" ]; then
         openclaw config set gateway.auth.password "${OPENCLAW_GATEWAY_PASSWORD}" || true
