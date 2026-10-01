@@ -346,6 +346,7 @@ actions:
           onboard_choice="$1"
           run_onboard_flag="$2"
           docker run --rm \
+            --security-opt seccomp=unconfined \
             -u root \
             -e HOME=/home/node \
             -v "$OPENCLAW_MOUNT:/home/node/.openclaw" \
@@ -365,6 +366,7 @@ actions:
           docker run -d \
             --name openclaw \
             --restart unless-stopped \
+            --security-opt seccomp=unconfined \
             -u root \
             -p "$PUBLIC_PORT:$CONTAINER_PORT" \
             -v "$OPENCLAW_MOUNT:/home/node/.openclaw" \

@@ -1,5 +1,5 @@
 type: install
-version: 1.11
+version: 1.12
 
 name: OpenClaw
 displayName: OpenClaw
@@ -20,8 +20,8 @@ globals:
   containerPort: 18789
   stateDir: /data/openclaw
   openclawVersion: latest
-  runtimeImage: openclaw-node:22-bullseye-slim
-  runtimeSource: docker.io/library/node:22-bullseye-slim
+  runtimeImage: openclaw-node:24-bookworm-slim
+  runtimeSource: docker.io/library/node:24-bookworm-slim
 
 nodes:
   - nodeGroup: cp
@@ -52,8 +52,8 @@ onInstall:
       PUBLIC_PORT="${globals.publicPort}"
       CONTAINER_PORT="${globals.containerPort}"
       OPENCLAW_VERSION="${globals.openclawVersion}"
-      RUNTIME_IMAGE="${globals.runtimeImage}"
       RUNTIME_SOURCE="${globals.runtimeSource}"
+      RUNTIME_IMAGE="${globals.runtimeImage}"
       ENV_FILE="/root/openclaw.env"
 
       install_helper_tools() {
@@ -142,6 +142,7 @@ onInstall:
       #!/bin/sh
       set -e
 
+      export HOME="/home/node"
       export OPENCLAW_CONFIG_DIR="/home/node/.openclaw"
       export OPENCLAW_WORKSPACE_DIR="/home/node/.openclaw/workspace"
       STARTSCRIPT
@@ -241,6 +242,7 @@ onInstall:
       docker run -d \
         --name openclaw \
         --restart unless-stopped \
+        --security-opt seccomp=unconfined \
         -u root \
         -p "${PUBLIC_PORT}:${CONTAINER_PORT}" \
         -v "${STATE_DIR}:/home/node/.openclaw" \
