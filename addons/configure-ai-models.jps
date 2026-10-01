@@ -7,6 +7,9 @@ baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
 targetNodes:
   nodeGroup: cp
 
+globals:
+  openclawVersion: 2026.8.33
+
 responses:
   200:
     type: success
@@ -194,8 +197,7 @@ actions:
         fi
 
         OPENCLAW_MOUNT="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/home/node/.openclaw"}}{{.Source}}{{end}}{{end}}' openclaw)"
-        OPENCLAW_IMAGE="$(docker inspect -f '{{.Config.Image}}' openclaw)"
-        read_container_port
+        OPENCLAW_IMAGE="$(docker inspect -f '{{.Config.Image}}' openclaw)"        read_container_port
         PUBLIC_PORT="$(docker port openclaw "$CONTAINER_PORT/tcp" 2>/dev/null | head -1 | cut -d: -f2 || true)"
         if [ -z "$PUBLIC_PORT" ]; then
           PUBLIC_PORT="80"
@@ -268,7 +270,7 @@ actions:
         export OPENCLAW_WORKSPACE_DIR=/home/node/.openclaw/workspace
         mkdir -p /home/node/.openclaw/workspace /home/node/.openclaw/devices
         if ! command -v openclaw >/dev/null 2>&1; then
-          npm install -g openclaw@latest
+          npm install -g "openclaw@${globals.openclawVersion}"
         fi
 
         restore_virtuozzo_gateway() {
@@ -346,7 +348,6 @@ actions:
           onboard_choice="$1"
           run_onboard_flag="$2"
           docker run --rm \
-            --security-opt seccomp=unconfined \
             -u root \
             -e HOME=/home/node \
             -v "$OPENCLAW_MOUNT:/home/node/.openclaw" \
@@ -366,7 +367,6 @@ actions:
           docker run -d \
             --name openclaw \
             --restart unless-stopped \
-            --security-opt seccomp=unconfined \
             -u root \
             -p "$PUBLIC_PORT:$CONTAINER_PORT" \
             -v "$OPENCLAW_MOUNT:/home/node/.openclaw" \

@@ -1,5 +1,5 @@
 type: install
-version: 1.12
+version: 1.13
 
 name: OpenClaw
 displayName: OpenClaw
@@ -19,15 +19,14 @@ globals:
   publicPort: 80
   containerPort: 18789
   stateDir: /data/openclaw
-  openclawVersion: latest
+  openclawVersion: 2026.8.33
   runtimeImage: openclaw-node:24-bookworm-slim
   runtimeSource: docker.io/library/node:24-bookworm-slim
 
 nodes:
   - nodeGroup: cp
-    nodeType: docker
+    nodeType: dockerengine
     displayName: OpenClaw Docker Engine
-    image: jelastic/docker-ce:latest
     cloudlets: 16
     fixedCloudlets: 1
     count: 1
@@ -95,7 +94,6 @@ onInstall:
         sleep 2
       done
       docker info >/dev/null
-
       echo "Preparing persistent directories..."
       mkdir -p "${STATE_DIR}/workspace" "${STATE_DIR}/devices"
 
@@ -123,6 +121,7 @@ onInstall:
 
       echo "Writing environment file..."
       {
+        printf 'HOME=/home/node\n'
         printf 'OPENCLAW_GATEWAY_TOKEN=%s\n' "$(normalize_env_value "${globals.gatewayToken}")"
         printf 'OPENCLAW_GATEWAY_PASSWORD=%s\n' "$(normalize_env_value "${globals.gatewayPassword}")"
         printf 'OPENCLAW_GATEWAY_PORT=%s\n' "$(normalize_env_value "${CONTAINER_PORT}")"
@@ -242,7 +241,6 @@ onInstall:
       docker run -d \
         --name openclaw \
         --restart unless-stopped \
-        --security-opt seccomp=unconfined \
         -u root \
         -p "${PUBLIC_PORT}:${CONTAINER_PORT}" \
         -v "${STATE_DIR}:/home/node/.openclaw" \
@@ -292,7 +290,7 @@ success: |
 
   * The Open in browser button uses the same pairing link as above.
   * Configure AI models from Add-ons → Configure AI Models.
-  * Add-ons also includes Update OpenClaw to Latest for future upgrades.
+  * Add-ons also includes Update OpenClaw for upgrades to the supported version.
   * Built-in SSL is enabled.
   * The node does not use a public IP.
   * Docker restart policy is set to unless-stopped.
