@@ -3,7 +3,7 @@ version: 1.13
 
 name: OpenClaw
 displayName: OpenClaw
-description: OpenClaw is a browser-first local gateway for launching, connecting to, and managing your OpenClaw workspace with token-based authentication and built-in update actions.
+description: OpenClaw is a browser-first local gateway for launching, connecting to, and managing your OpenClaw workspace with token-based authentication.
 homepage: https://docs.openclaw.ai/
 baseUrl: https://raw.githubusercontent.com/sych74/openclaw/main
 logo: https://github.com/openclaw.png
@@ -271,11 +271,6 @@ onInstall:
       jps: ${baseUrl}/addons/configure-ai-models.jps?_r=${fn.random}
       nodeGroup: cp
       targetNodes: cp
-  
-  - install:
-      jps: ${baseUrl}/addons/update-openclaw-latest.jps?_r=${fn.random}
-      nodeGroup: cp
-      targetNodes: cp
 
 startPage: https://${env.domain}/?bootstrap=${fn.uuid}#token=${globals.gatewayToken}
 
@@ -298,7 +293,6 @@ success: |
 
   * The Open in browser button uses the same pairing link as above.
   * Configure AI models from Add-ons → Configure AI Models.
-  * Add-ons also includes Update OpenClaw for upgrades to the supported version.
   * Built-in SSL is enabled.
   * The node does not use a public IP.
   * Docker restart policy is set to unless-stopped.
