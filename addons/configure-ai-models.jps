@@ -82,6 +82,9 @@ actions:
         (
         set -eu
 
+        GATEWAY_STOPPED=0
+        trap 'if [ "$GATEWAY_STOPPED" = 1 ]; then docker start openclaw >/dev/null 2>&1 || true; fi' EXIT
+
         oc_finish() {
           echo "$1" > "$RESULT_FILE"
           exit "$1"
@@ -197,7 +200,8 @@ actions:
         fi
 
         OPENCLAW_MOUNT="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/home/node/.openclaw"}}{{.Source}}{{end}}{{end}}' openclaw)"
-        OPENCLAW_IMAGE="$(docker inspect -f '{{.Config.Image}}' openclaw)"        read_container_port
+        OPENCLAW_IMAGE="$(docker inspect -f '{{.Config.Image}}' openclaw)"
+        read_container_port
         PUBLIC_PORT="$(docker port openclaw "$CONTAINER_PORT/tcp" 2>/dev/null | head -1 | cut -d: -f2 || true)"
         if [ -z "$PUBLIC_PORT" ]; then
           PUBLIC_PORT="80"
@@ -380,6 +384,7 @@ actions:
         }
 
         docker stop openclaw
+        GATEWAY_STOPPED=1
 
         provider_registered() {
           auth_file="$OPENCLAW_MOUNT/agents/main/agent/auth-profiles.json"
@@ -405,6 +410,7 @@ actions:
 
         strip_onboard_vars
         normalize_env_file
+        GATEWAY_STOPPED=0
         recreate_openclaw_container
 
         for i in $(seq 1 120); do
