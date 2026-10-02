@@ -348,6 +348,8 @@ actions:
 
         echo "Setting default model to $TARGET_MODEL..."
         openclaw models set "$TARGET_MODEL"
+        # openai/* implicitly selects the Codex harness, whose plugin is not bundled.
+        openclaw config set 'agents.defaults.models["openai/*"].agentRuntime' '{"id":"openclaw"}' --strict-json
         restore_virtuozzo_gateway
         OC_MAINT
         chmod 700 "$MAINT_SCRIPT"
@@ -414,7 +416,8 @@ actions:
         recreate_openclaw_container
 
         for i in $(seq 1 120); do
-          if curl -fsS "http://127.0.0.1:$PUBLIC_PORT/" >/dev/null 2>&1; then
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:$PUBLIC_PORT/" || true)"
+          if [ -n "$code" ] && [ "$code" != "000" ]; then
             break
           fi
           sleep 2
