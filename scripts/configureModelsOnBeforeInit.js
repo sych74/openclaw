@@ -74,8 +74,7 @@ function buildStatusMarkup(totalModels) {
     return "Loaded model catalogs: " + totalModels + " entries across providers.";
 }
 
-function buildModelValues(listJson) {
-    var data = null;
+function buildModelValuesFromData(data) {
     var models = [];
     var values = [];
     var seen = {};
@@ -83,12 +82,6 @@ function buildModelValues(listJson) {
     var model;
     var key;
     var caption;
-
-    try {
-        data = toNative(new JSONObject(String(listJson || "{}")));
-    } catch (e) {
-        return values;
-    }
 
     if (data && data.models && data.models.length) {
         models = data.models;
@@ -108,6 +101,58 @@ function buildModelValues(listJson) {
     }
 
     return values;
+}
+
+function buildModelValues(listJson) {
+    try {
+        return buildModelValuesFromData(toNative(new JSONObject(String(listJson || "{}"))));
+    } catch (e) {
+        return [];
+    }
+}
+
+function extractJsonObject(text) {
+    var raw = String(text || "");
+    var start = raw.indexOf("{");
+    var end = raw.lastIndexOf("}");
+    if (start < 0 || end < start) return "";
+    return raw.substring(start, end + 1);
+}
+
+// models list omits OpenRouter and xAI until an API key exists.
+// Their selectable models still ship in the installed OpenClaw package.
+var bundledCatalogs = null;
+
+function readBundledCatalogs() {
+    var bundledCmd = "docker exec openclaw node --input-type=module -e '" +
+        "const out={};" +
+        "function modelKey(providerId,modelId){const p=String(providerId||\"\").trim();const m=String(modelId||\"\").trim();if(!p)return m;if(!m)return p;return m.toLowerCase().startsWith(p.toLowerCase()+\"/\")?m:p+\"/\"+m;}" +
+        "try{const {buildXaiCatalogModels}=await import(\"/usr/local/lib/node_modules/openclaw/dist/extensions/xai/model-definitions.js\");out.grok={models:buildXaiCatalogModels().map((model)=>({key:modelKey(\"xai\",model.id),name:model.name,available:false}))}}catch(e){}" +
+        "try{const {buildOpenrouterProvider}=await import(\"/usr/local/lib/node_modules/openclaw/dist/extensions/openrouter/provider-catalog.js\");out.openrouter={models:buildOpenrouterProvider().models.map((model)=>({key:modelKey(\"openrouter\",model.id),name:model.name,available:false}))}}catch(e){}" +
+        "process.stdout.write(JSON.stringify(out));" +
+        "' 2>/dev/null || echo {}";
+    var resp = execOnCp(bundledCmd);
+    var json;
+
+    if (!resp || resp.result != 0) return {};
+    json = extractJsonObject(readCommandOutput(resp));
+    if (!json) return {};
+
+    try {
+        return toNative(new JSONObject(json)) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function bundledModelValues(providerKey) {
+    var entry;
+
+    if (providerKey !== "openrouter" && providerKey !== "grok") return [];
+    if (!bundledCatalogs) bundledCatalogs = readBundledCatalogs();
+    entry = providerKey === "grok" ? bundledCatalogs.grok : bundledCatalogs.openrouter;
+    if (!entry) return [];
+    return buildModelValuesFromData(entry);
 }
 
 function listHasModel(providerList, modelId) {
@@ -176,6 +221,9 @@ for (i = 0; i < PROVIDER_KEYS.length; i++) {
     if (respList.result != 0) return respList;
     listJson = String(readCommandOutput(respList) || "{}").trim();
     modelsByProvider[providerKey] = buildModelValues(listJson);
+    if (!modelsByProvider[providerKey].length) {
+        modelsByProvider[providerKey] = bundledModelValues(providerKey);
+    }
     totalModels += modelsByProvider[providerKey].length;
 }
 
