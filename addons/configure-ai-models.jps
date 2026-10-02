@@ -348,8 +348,6 @@ actions:
 
         echo "Setting default model to $TARGET_MODEL..."
         openclaw models set "$TARGET_MODEL"
-        # openai/* implicitly selects the Codex harness, whose plugin is not bundled.
-        openclaw config set 'agents.defaults.models["openai/*"].agentRuntime' '{"id":"openclaw"}' --strict-json
         restore_virtuozzo_gateway
         OC_MAINT
         chmod 700 "$MAINT_SCRIPT"
@@ -426,6 +424,10 @@ actions:
         docker exec \
           -e TARGET_MODEL="$TARGET_MODEL" \
           openclaw sh -lc 'openclaw models set "$TARGET_MODEL"' || true
+
+        # models set rewrites agents.defaults.models and drops this pin.
+        # openai/* otherwise selects the Codex harness, which is not bundled.
+        docker exec openclaw sh -lc 'openclaw config set "agents.defaults.models[\"openai/*\"].agentRuntime" "{\"id\":\"openclaw\"}" --strict-json' || true
 
         docker exec openclaw sh -lc 'openclaw models status' || true
         rm -f "$MAINT_SCRIPT"
